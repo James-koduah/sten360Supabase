@@ -6,12 +6,11 @@ import { DollarSign, X } from 'lucide-react';
 
 interface RecordPaymentProps {
   orderId: string;
-  totalAmount: number;
   outstandingBalance: number;
   onPaymentRecorded: () => void;
 }
 
-export const RecordPayment = ({ orderId, totalAmount, outstandingBalance, onPaymentRecorded }: RecordPaymentProps) => {
+export const RecordPayment = ({ orderId, outstandingBalance, onPaymentRecorded }: RecordPaymentProps) => {
   const { addToast } = useUI();
   const { organization } = useAuthStore();
   const [isOpen, setIsOpen] = useState(false);
@@ -54,7 +53,7 @@ export const RecordPayment = ({ orderId, totalAmount, outstandingBalance, onPaym
     setIsSubmitting(true);
 
     try {
-      const { data, error } = await supabase.rpc('record_payment', {
+      const { error } = await supabase.rpc('record_payment', {
         p_organization_id: organization?.id,
         p_order_id: orderId,
         p_amount: numericAmount,

@@ -17,6 +17,10 @@ interface Organization {
   updated_at?: string;
 }
 
+interface UserOrganization {
+  organizations: Organization;
+}
+
 interface AuthState {
   user: User | null;
   organization: Organization | null;
@@ -43,18 +47,39 @@ export const useAuthStore = create<AuthState>((set) => ({
       if (error) throw error;
 
       if (session?.user) {
-        // Load basic organization data
-        const { data: orgData, error: orgError } = await supabase
+        // First try to get organization where user is a member
+        const { data: userOrg, error: userOrgError } = await supabase
+          .from('users_organizations')
+          .select('organizations:organization_id(*)')
+          .eq('user_id', session.user.id)
+          .maybeSingle();
+
+        if (userOrgError) throw userOrgError;
+
+        // If found as member, use that organization
+        if (userOrg?.organizations) {
+          const org = userOrg.organizations as unknown as Organization;
+          set({ 
+            user: session.user,
+            organization: org,
+            error: null,
+            initialized: true
+          });
+          return;
+        }
+
+        // If not found as member, try to get organization where user is owner
+        const { data: ownedOrg, error: ownedOrgError } = await supabase
           .from('organizations')
           .select()
           .eq('owner_id', session.user.id)
           .maybeSingle();
 
-        if (orgError) throw orgError;
+        if (ownedOrgError) throw ownedOrgError;
 
         set({ 
           user: session.user,
-          organization: orgData,
+          organization: ownedOrg,
           error: null,
           initialized: true
         });
@@ -99,18 +124,39 @@ export const useAuthStore = create<AuthState>((set) => ({
 
       if (!authData.user) throw new Error('No user returned from sign in');
 
-      // Load organization data
-      const { data: orgData, error: orgError } = await supabase
+      // First try to get organization where user is a member
+      const { data: userOrg, error: userOrgError } = await supabase
+        .from('users_organizations')
+        .select('organizations:organization_id(*)')
+        .eq('user_id', authData.user.id)
+        .maybeSingle();
+
+      if (userOrgError) throw userOrgError;
+
+      // If found as member, use that organization
+      if (userOrg?.organizations) {
+        const org = userOrg.organizations as unknown as Organization;
+        set({ 
+          user: authData.user,
+          organization: org,
+          error: null,
+          initialized: true
+        });
+        return;
+      }
+
+      // If not found as member, try to get organization where user is owner
+      const { data: ownedOrg, error: ownedOrgError } = await supabase
         .from('organizations')
         .select()
         .eq('owner_id', authData.user.id)
         .maybeSingle();
 
-      if (orgError) throw orgError;
+      if (ownedOrgError) throw ownedOrgError;
 
       set({ 
-        user: authData.user, 
-        organization: orgData,
+        user: authData.user,
+        organization: ownedOrg,
         error: null,
         initialized: true
       });
@@ -152,6 +198,17 @@ export const useAuthStore = create<AuthState>((set) => ({
         .single();
 
       if (orgError) throw orgError;
+
+      // Create users_organizations entry
+      const { error: userOrgError } = await supabase
+        .from('users_organizations')
+        .insert([{
+          user_id: authData.user.id,
+          organization_id: orgData.id,
+          role: 'owner'
+        }]);
+
+      if (userOrgError) throw userOrgError;
 
       set({ 
         user: authData.user,
@@ -252,17 +309,39 @@ supabase.auth.onAuthStateChange(async (event, session) => {
 
   if (event === 'SIGNED_IN' && session?.user) {
     try {
-      const { data: orgData, error: orgError } = await supabase
+      // First try to get organization where user is a member
+      const { data: userOrg, error: userOrgError } = await supabase
+        .from('users_organizations')
+        .select('organizations:organization_id(*)')
+        .eq('user_id', session.user.id)
+        .maybeSingle();
+
+      if (userOrgError) throw userOrgError;
+
+      // If found as member, use that organization
+      if (userOrg?.organizations) {
+        const org = userOrg.organizations as unknown as Organization;
+        useAuthStore.setState({
+          user: session.user,
+          organization: org,
+          error: null,
+          initialized: true
+        });
+        return;
+      }
+
+      // If not found as member, try to get organization where user is owner
+      const { data: ownedOrg, error: ownedOrgError } = await supabase
         .from('organizations')
         .select()
         .eq('owner_id', session.user.id)
         .maybeSingle();
 
-      if (orgError) throw orgError;
+      if (ownedOrgError) throw ownedOrgError;
 
       useAuthStore.setState({
         user: session.user,
-        organization: orgData,
+        organization: ownedOrg,
         error: null,
         initialized: true
       });
@@ -284,6 +363,6 @@ setInterval(async () => {
   if (state.user) {
     await state.refreshSession();
   }
-}, 10 * 60 * 1000); // Refresh every 10 minutes
+}, 10 * 60 * 1000);
 
 export default useAuthStore;

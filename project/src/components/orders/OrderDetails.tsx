@@ -125,7 +125,7 @@ export default function OrderDetails() {
             id,
             field:client_custom_fields(title, value)
           ),
-          payments(
+          payments:service_payments(
             id,
             amount,
             payment_method,
@@ -327,7 +327,6 @@ export default function OrderDetails() {
                 {order.payment_status !== 'paid' && (
                   <RecordPayment
                     orderId={order.id}
-                    totalAmount={order.total_amount}
                     outstandingBalance={order.outstanding_balance}
                     onPaymentRecorded={loadOrderDetails}
                   />

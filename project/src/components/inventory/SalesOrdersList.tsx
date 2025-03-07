@@ -8,7 +8,7 @@ import { PAYMENT_STATUS_LABELS, PAYMENT_STATUS_COLORS } from '../../utils/invent
 import { CURRENCIES } from '../../utils/constants';
 import { format } from 'date-fns';
 import CreateSalesOrderForm from './CreateSalesOrderForm';
-import ReceivePaymentForm from './ReceivePaymentForm';
+import { RecordPayment } from '../orders/RecordPayment';
 
 type PaymentStatus = keyof typeof PAYMENT_STATUS_LABELS;
 
@@ -161,13 +161,14 @@ export default function SalesOrdersList() {
               setSelectedOrder(null);
             }} />
             <div className="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-2xl">
-              <ReceivePaymentForm
-                order={selectedOrder}
-                onClose={() => {
+              <RecordPayment
+                orderId={selectedOrder.id}
+                outstandingBalance={selectedOrder.outstanding_balance}
+                onPaymentRecorded={() => {
                   setShowPaymentForm(false);
                   setSelectedOrder(null);
+                  loadOrders();
                 }}
-                onSuccess={loadOrders}
               />
             </div>
           </div>

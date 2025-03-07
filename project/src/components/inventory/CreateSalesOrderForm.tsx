@@ -5,11 +5,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { useUI } from '../../context/UIContext';
 import { Product } from '../../types/inventory';
 import { CURRENCIES } from '../../utils/constants';
-
-interface Client {
-  id: string;
-  name: string;
-}
+import { Client } from '../../types/clients';
 
 interface OrderItem {
   product_id: string | null;
@@ -41,42 +37,59 @@ export default function CreateSalesOrderForm({ onClose, onSuccess }: CreateSales
   const { organization } = useAuthStore();
   const { addToast } = useUI();
   const currencySymbol = organization?.currency ? CURRENCIES[organization.currency]?.symbol || organization.currency : '';
+  const [isLoadingClients, setIsLoadingClients] = useState(true);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(true);
 
   useEffect(() => {
-    if (!organization) return;
-    loadData();
+    if (organization) {
+      loadClients();
+      loadProducts();
+    }
   }, [organization]);
 
-  const loadData = async () => {
+  const loadClients = async () => {
     if (!organization?.id) return;
-
     try {
-      // Load clients
-      const { data: clientsData, error: clientsError } = await supabase
+      const { data, error } = await supabase
         .from('clients')
-        .select('id, name')
+        .select('*')
         .eq('organization_id', organization.id)
         .order('name');
 
-      if (clientsError) throw clientsError;
-      setClients(clientsData || []);
+      if (error) throw error;
+      setClients(data || []);
+    } catch (error) {
+      console.error('Error loading clients:', error);
+      addToast({
+        type: 'error',
+        title: 'Error',
+        message: 'Failed to load clients'
+      });
+    } finally {
+      setIsLoadingClients(false);
+    }
+  };
 
-      // Load products
-      const { data: productsData, error: productsError } = await supabase
+  const loadProducts = async () => {
+    if (!organization?.id) return;
+    try {
+      const { data, error } = await supabase
         .from('products')
         .select('*')
         .eq('organization_id', organization.id)
         .order('name');
 
-      if (productsError) throw productsError;
-      setProducts(productsData || []);
+      if (error) throw error;
+      setProducts(data || []);
     } catch (error) {
-      console.error('Error loading data:', error);
+      console.error('Error loading products:', error);
       addToast({
         type: 'error',
         title: 'Error',
-        message: 'Failed to load data'
+        message: 'Failed to load products'
       });
+    } finally {
+      setIsLoadingProducts(false);
     }
   };
 
@@ -237,6 +250,14 @@ export default function CreateSalesOrderForm({ onClose, onSuccess }: CreateSales
       setIsSubmitting(false);
     }
   };
+
+  if (isLoadingClients || isLoadingProducts) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
   return (
     <form onSubmit={handleSubmit} className="p-6 space-y-6">
