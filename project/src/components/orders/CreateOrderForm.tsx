@@ -22,14 +22,14 @@ interface Worker {
   name: string;
 }
 
-interface Service {
+interface Product {
   id: string;
   name: string;
-  cost: number;
+  unit_price: number;
 }
 
-interface OrderService {
-  service: Service;
+interface OrderProduct {
+  product: Product;
   quantity: number;
 }
 
@@ -41,11 +41,11 @@ interface CreateOrderFormProps {
 export default function CreateOrderForm({ onClose, onSuccess }: CreateOrderFormProps) {
   const [clients, setClients] = useState<Client[]>([]);
   const [workers, setWorkers] = useState<Worker[]>([]);
-  const [services, setServices] = useState<Service[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [workerProjects, setWorkerProjects] = useState<{[key: string]: any[]}>({});
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [selectedCustomFields, setSelectedCustomFields] = useState<string[]>([]);
-  const [selectedServices, setSelectedServices] = useState<OrderService[]>([]);
+  const [selectedProducts, setSelectedProducts] = useState<OrderProduct[]>([]);
   const [selectedWorkers, setSelectedWorkers] = useState<{
     worker_id: string;
     project_id: string;
@@ -58,6 +58,11 @@ export default function CreateOrderForm({ onClose, onSuccess }: CreateOrderFormP
     initial_payment: 0,
     payment_method: ''
   });
+  const [validationState, setValidationState] = useState({
+    client: false,
+    products: false,
+    workers: false
+  });
 
   const { organization } = useAuthStore();
   const { addToast } = useUI();
@@ -67,6 +72,14 @@ export default function CreateOrderForm({ onClose, onSuccess }: CreateOrderFormP
     if (!organization?.id) return;
     loadData();
   }, [organization]);
+
+  useEffect(() => {
+    setValidationState({
+      client: !!selectedClient,
+      products: selectedProducts.length > 0,
+      workers: selectedWorkers.some(w => w.worker_id && w.project_id)
+    });
+  }, [selectedClient, selectedProducts, selectedWorkers]);
 
   const loadData = async () => {
     if (!organization?.id) return;
@@ -93,14 +106,14 @@ export default function CreateOrderForm({ onClose, onSuccess }: CreateOrderFormP
       if (workersError) throw workersError;
       setWorkers(workersData || []);
 
-      // Load services
-      const { data: servicesData, error: servicesError } = await supabase
-        .from('services')
+      // Load products instead of services
+      const { data: productsData, error: productsError } = await supabase
+        .from('products')
         .select('*')
         .eq('organization_id', organization.id);
 
-      if (servicesError) throw servicesError;
-      setServices(servicesData || []);
+      if (productsError) throw productsError;
+      setProducts(productsData || []);
     } catch (error) {
       console.error('Error loading data:', error);
       addToast({
@@ -141,11 +154,11 @@ export default function CreateOrderForm({ onClose, onSuccess }: CreateOrderFormP
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedClient || selectedServices.length === 0 || !selectedWorkers.some(w => w.worker_id && w.project_id)) {
+    if (!selectedClient || selectedProducts.length === 0 || !selectedWorkers.some(w => w.worker_id && w.project_id)) {
       addToast({
         type: 'error',
         title: 'Validation Error',
-        message: 'Please select a client, at least one service, and assign at least one worker with a project.'
+        message: 'Please select a client, at least one product, and assign at least one worker with a project.'
       });
       return;
     }
@@ -159,8 +172,8 @@ export default function CreateOrderForm({ onClose, onSuccess }: CreateOrderFormP
       return;
     }
 
-    const totalAmount = selectedServices.reduce(
-      (sum, { service, quantity }) => sum + (service.cost * quantity),
+    const totalAmount = selectedProducts.reduce(
+      (sum, { product, quantity }) => sum + (product.unit_price * quantity),
       0
     );
 
@@ -175,8 +188,11 @@ export default function CreateOrderForm({ onClose, onSuccess }: CreateOrderFormP
 
     setIsSubmitting(true);
     try {
-      // Start a transaction
-      const { data: orderData, error: orderError } = await supabase.rpc('create_order', {
+      const user = await supabase.auth.getUser();
+      if (!user.data.user?.id) throw new Error('User not authenticated');
+
+      // Create order with products
+      const { data: orderData, error: orderError } = await supabase.rpc('create_order_with_products', {
         p_organization_id: organization.id,
         p_client_id: selectedClient.id,
         p_description: formData.description.trim() || null,
@@ -188,10 +204,11 @@ export default function CreateOrderForm({ onClose, onSuccess }: CreateOrderFormP
             worker_id: w.worker_id,
             project_id: w.project_id
           })),
-        p_services: selectedServices.map(({ service, quantity }) => ({
-          service_id: service.id,
+        p_products: selectedProducts.map(({ product, quantity }) => ({
+          product_id: product.id,
           quantity,
-          cost: service.cost * quantity
+          unit_price: product.unit_price,
+          total_price: product.unit_price * quantity
         })),
         p_custom_fields: selectedCustomFields
       });
@@ -207,7 +224,7 @@ export default function CreateOrderForm({ onClose, onSuccess }: CreateOrderFormP
           p_amount: formData.initial_payment,
           p_payment_method: formData.payment_method,
           p_payment_reference: `Initial payment for order ${orderData.order_number}`,
-          p_recorded_by: (await supabase.auth.getUser()).data.user?.id
+          p_recorded_by: user.data.user.id
         });
 
         if (paymentError) throw paymentError;
@@ -237,23 +254,23 @@ export default function CreateOrderForm({ onClose, onSuccess }: CreateOrderFormP
     client.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleServiceQuantity = (service: Service, action: 'add' | 'remove' | 'update', value?: number) => {
-    setSelectedServices(prev => {
-      const existing = prev.find(s => s.service.id === service.id);
+  const handleProductQuantity = (product: Product, action: 'add' | 'remove' | 'update', value?: number) => {
+    setSelectedProducts(prev => {
+      const existing = prev.find(p => p.product.id === product.id);
       
       if (action === 'add' && !existing) {
-        return [...prev, { service, quantity: 1 }];
+        return [...prev, { product, quantity: 1 }];
       }
 
       if (action === 'remove') {
-        return prev.filter(s => s.service.id !== service.id);
+        return prev.filter(p => p.product.id !== product.id);
       }
 
       if (action === 'update' && value !== undefined) {
-        return prev.map(s =>
-          s.service.id === service.id
-            ? { ...s, quantity: Math.max(1, value) }
-            : s
+        return prev.map(p =>
+          p.product.id === product.id
+            ? { ...p, quantity: Math.max(1, value) }
+            : p
         );
       }
 
@@ -261,8 +278,8 @@ export default function CreateOrderForm({ onClose, onSuccess }: CreateOrderFormP
     });
   };
 
-  const totalAmount = selectedServices.reduce(
-    (sum, { service, quantity }) => sum + (service.cost * quantity),
+  const totalAmount = selectedProducts.reduce(
+    (sum, { product, quantity }) => sum + (product.unit_price * quantity),
     0
   );
 
@@ -493,54 +510,54 @@ export default function CreateOrderForm({ onClose, onSuccess }: CreateOrderFormP
             </div>
           </div>
 
-          {/* Services Section */}
+          {/* Products Section (formerly Services Section) */}
           <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
             <h3 className="text-base font-semibold text-gray-900 mb-4 flex items-center">
               <span className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 text-blue-600 mr-3 font-bold">2</span>
-              Services and Products
+              Products
             </h3>
 
-            {/* Available Services */}
+            {/* Available Products */}
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {services.map(service => {
-                  const selectedService = selectedServices.find(s => s.service.id === service.id);
+                {products.map(product => {
+                  const selectedProduct = selectedProducts.find(p => p.product.id === product.id);
                   return (
                     <div
-                      key={service.id}
+                      key={product.id}
                       className={`p-4 rounded-lg border ${
-                        selectedService ? 'border-blue-200 bg-blue-50' : 'border-gray-200'
+                        selectedProduct ? 'border-blue-200 bg-blue-50' : 'border-gray-200'
                       }`}
                     >
                       <div className="flex items-center justify-between">
                         <div>
-                          <h4 className="font-medium text-gray-900">{service.name}</h4>
+                          <h4 className="font-medium text-gray-900">{product.name}</h4>
                           <p className="text-sm text-gray-500 mt-1">
-                            {currencySymbol} {service.cost.toFixed(2)}
+                            {currencySymbol} {product.unit_price.toFixed(2)}
                           </p>
                         </div>
-                        {selectedService ? (
+                        {selectedProduct ? (
                           <div className="flex items-center space-x-2">
                             <button
                               type="button"
-                              onClick={() => handleServiceQuantity(service, 'update', selectedService.quantity - 1)}
+                              onClick={() => handleProductQuantity(product, 'update', selectedProduct.quantity - 1)}
                               className="p-1 text-gray-400 hover:text-gray-600"
                             >
                               <Minus className="h-4 w-4" />
                             </button>
                             <span className="text-gray-900 min-w-[2rem] text-center">
-                              {selectedService.quantity}
+                              {selectedProduct.quantity}
                             </span>
                             <button
                               type="button"
-                              onClick={() => handleServiceQuantity(service, 'update', selectedService.quantity + 1)}
+                              onClick={() => handleProductQuantity(product, 'update', selectedProduct.quantity + 1)}
                               className="p-1 text-gray-400 hover:text-gray-600 transition-colors duration-200"
                             >
                               <Plus className="h-4 w-4" />
                             </button>
                             <button
                               type="button"
-                              onClick={() => handleServiceQuantity(service, 'remove')}
+                              onClick={() => handleProductQuantity(product, 'remove')}
                               className="p-1 text-red-400 hover:text-red-600"
                             >
                               <X className="h-4 w-4" />
@@ -549,7 +566,7 @@ export default function CreateOrderForm({ onClose, onSuccess }: CreateOrderFormP
                         ) : (
                           <button
                             type="button"
-                            onClick={() => handleServiceQuantity(service, 'add')}
+                            onClick={() => handleProductQuantity(product, 'add')}
                             className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-full transition-all duration-200"
                           >
                             <Plus className="h-4 w-4" />
@@ -562,7 +579,7 @@ export default function CreateOrderForm({ onClose, onSuccess }: CreateOrderFormP
               </div>
 
               {/* Total Amount */}
-              {selectedServices.length > 0 && (
+              {selectedProducts.length > 0 && (
                 <div className="mt-6 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-lg shadow-sm">
                   <div className="flex justify-between items-center">
                     <span className="text-sm font-medium text-gray-700">Total Amount</span>
@@ -662,7 +679,7 @@ export default function CreateOrderForm({ onClose, onSuccess }: CreateOrderFormP
             </button>
             <button
               type="submit"
-              disabled={isSubmitting || !selectedClient || selectedServices.length === 0}
+              disabled={isSubmitting || !selectedClient}
               className="px-6 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400 flex items-center transition-colors duration-200 shadow-sm"
             >
               {isSubmitting ? (
@@ -680,6 +697,18 @@ export default function CreateOrderForm({ onClose, onSuccess }: CreateOrderFormP
                 </>
               )}
             </button>
+          </div>
+
+          <div className="mt-4 space-y-2">
+            <div className={`text-sm ${validationState.client ? 'text-green-600' : 'text-gray-500'}`}>
+              {validationState.client ? '✓ Client selected' : 'Client not selected'}
+            </div>
+            <div className={`text-sm ${validationState.products ? 'text-green-600' : 'text-gray-500'}`}>
+              {validationState.products ? '✓ Products selected' : 'No products selected'}
+            </div>
+            <div className={`text-sm ${validationState.workers ? 'text-green-600' : 'text-gray-500'}`}>
+              {validationState.workers ? '✓ Workers assigned' : 'No workers assigned'}
+            </div>
           </div>
         </form>
       </div>

@@ -34,14 +34,16 @@ interface Order {
     };
     status: string;
   }[];
-  services: {
+  items: {
     id: string;
-    service_id: string;
-    service: {
-      name: string;
-    };
+    product_id: string;
     quantity: number;
-    cost: number;
+    unit_price: number;
+    total_price: number;
+    product: {
+      name: string;
+      unit_price: number;
+    };
   }[];
 }
 
@@ -83,12 +85,16 @@ export default function OrdersList() {
             project:projects(name),
             status
           ),
-          services:order_services(
+          items:order_items(
             id,
-            service_id,
-            service:services(name),
+            product_id,
             quantity,
-            cost
+            unit_price,
+            total_price,
+            product:products(
+              name,
+              unit_price
+            )
           ),
           outstanding_balance,
           payment_status
@@ -294,7 +300,7 @@ export default function OrdersList() {
                     Workers
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Services
+                    Products
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Due Date
@@ -344,12 +350,12 @@ export default function OrdersList() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex flex-col space-y-1">
-                        {order.services.map(service => (
-                          <div key={service.id} className="flex items-center text-sm">
+                        {order.items.map(item => (
+                          <div key={item.id} className="flex items-center text-sm">
                             <Package className="h-4 w-4 text-gray-400 mr-2" />
-                            <span className="text-gray-900">{service.service.name}</span>
+                            <span className="text-gray-900">{item.product.name}</span>
                             <span className="text-gray-500 ml-2">
-                              × {service.quantity}
+                              × {item.quantity}
                             </span>
                           </div>
                         ))}

@@ -111,7 +111,7 @@ export default function SalesOrdersList() {
 
   const filteredOrders = orders.filter(order =>
     (statusFilter === 'all' || order.payment_status === statusFilter) &&
-    (order.order_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (order.order_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
      order.client?.name.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 

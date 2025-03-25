@@ -205,7 +205,6 @@ export default function WorkersList() {
         weeklyProjectTotal: 0,
         assignedTasks: 0,
         completedTasks: 0,
-        weeklyProjectTotal: 0,
         allTimeTasks: 0,
         weeklyTasks: 0,
         dailyTasks: 0

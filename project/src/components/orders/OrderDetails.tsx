@@ -41,21 +41,15 @@ interface Payment {
   created_at: string;
 }
 
-interface OrderService {
+interface OrderItem {
   id: string;
-  service: {
+  product: {
     name: string;
+    unit_price: number;
   };
   quantity: number;
-  cost: number;
-}
-
-interface CustomField {
-  id: string;
-  field: {
-    title: string;
-    value: string;
-  };
+  unit_price: number;
+  total_price: number;
 }
 
 interface OrderWorker {
@@ -83,9 +77,8 @@ interface Order {
   payment_status: 'unpaid' | 'partially_paid' | 'paid';
   created_at: string;
   workers: OrderWorker[];
-  services: OrderService[];
+  items: OrderItem[];
   payments: Payment[];
-  custom_fields: CustomField[];
 }
 
 export default function OrderDetails() {
@@ -114,18 +107,18 @@ export default function OrderDetails() {
             worker:workers(name),
             project:projects(name)
           ),
-          services:order_services(
+          items:order_items(
             id,
-            service_id,
+            product_id,
             quantity,
-            cost,
-            service:services(name)
+            unit_price,
+            total_price,
+            product:products(
+              name,
+              unit_price
+            )
           ),
-          custom_fields:order_custom_fields(
-            id,
-            field:client_custom_fields(title, value)
-          ),
-          payments:service_payments(
+          payments:payments(
             id,
             amount,
             payment_method,
@@ -253,28 +246,28 @@ export default function OrderDetails() {
           {/* Services */}
           <div className="bg-white shadow rounded-lg overflow-hidden">
             <div className="px-4 py-5 sm:px-6 border-b">
-              <h3 className="text-lg font-medium text-gray-900">Services</h3>
+              <h3 className="text-lg font-medium text-gray-900">Products</h3>
             </div>
             <div className="px-4 py-5 sm:p-6">
               <div className="space-y-4">
-                {order.services.map((service) => (
+                {order.items.map((item) => (
                   <div
-                    key={service.id}
+                    key={item.id}
                     className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
                   >
                     <div className="flex items-center space-x-3">
                       <Package className="h-5 w-5 text-gray-400" />
                       <div>
                         <p className="text-sm font-medium text-gray-900">
-                          {service.service.name}
+                          {item.product.name}
                         </p>
                         <p className="text-sm text-gray-500">
-                          Quantity: {service.quantity}
+                          Quantity: {item.quantity}
                         </p>
                       </div>
                     </div>
                     <div className="text-sm font-medium text-gray-900">
-                      {currencySymbol} {service.cost.toFixed(2)}
+                      {currencySymbol} {item.total_price.toFixed(2)}
                     </div>
                   </div>
                 ))}
@@ -289,32 +282,6 @@ export default function OrderDetails() {
               </div>
             </div>
           </div>
-
-          {/* Custom Fields */}
-          {order.custom_fields?.length > 0 && (
-            <div className="bg-white shadow rounded-lg overflow-hidden">
-              <div className="px-4 py-5 sm:px-6 border-b">
-                <h3 className="text-lg font-medium text-gray-900">Custom Information</h3>
-              </div>
-              <div className="px-4 py-5 sm:p-6">
-                <div className="space-y-4">
-                  {order.custom_fields.map((field) => (
-                    <div key={field.id} className="flex items-start space-x-3">
-                      <FileText className="h-5 w-5 text-gray-400" />
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">
-                          {field.field.title}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          {field.field.value}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Payment Details Section */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">

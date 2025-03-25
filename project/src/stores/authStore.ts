@@ -42,8 +42,8 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   refreshSession: async () => {
     try {
-      const { data: { session }, error } = await supabase.auth.getSession();
-
+      const { data, error } = await supabase.auth.getSession();
+      const session = data.session;
       if (error) throw error;
 
       if (session?.user) {
@@ -287,6 +287,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 const initAuth = async () => {
   try {
     await useAuthStore.getState().refreshSession();
+    console.log('initAuth');
   } catch (error) {
     console.error('Auth initialization error:', error);
   }
@@ -307,54 +308,6 @@ supabase.auth.onAuthStateChange(async (event, session) => {
     return;
   }
 
-  if (event === 'SIGNED_IN' && session?.user) {
-    try {
-      // First try to get organization where user is a member
-      const { data: userOrg, error: userOrgError } = await supabase
-        .from('users_organizations')
-        .select('organizations:organization_id(*)')
-        .eq('user_id', session.user.id)
-        .maybeSingle();
-
-      if (userOrgError) throw userOrgError;
-
-      // If found as member, use that organization
-      if (userOrg?.organizations) {
-        const org = userOrg.organizations as unknown as Organization;
-        useAuthStore.setState({
-          user: session.user,
-          organization: org,
-          error: null,
-          initialized: true
-        });
-        return;
-      }
-
-      // If not found as member, try to get organization where user is owner
-      const { data: ownedOrg, error: ownedOrgError } = await supabase
-        .from('organizations')
-        .select()
-        .eq('owner_id', session.user.id)
-        .maybeSingle();
-
-      if (ownedOrgError) throw ownedOrgError;
-
-      useAuthStore.setState({
-        user: session.user,
-        organization: ownedOrg,
-        error: null,
-        initialized: true
-      });
-    } catch (error) {
-      console.error('Error loading organization:', error);
-      useAuthStore.setState({
-        user: session.user,
-        organization: null,
-        error: error instanceof Error ? error.message : 'Failed to load organization',
-        initialized: true
-      });
-    }
-  }
 });
 
 // Set up auto-refresh of session
